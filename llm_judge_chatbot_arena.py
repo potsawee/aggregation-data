@@ -106,18 +106,22 @@ def main():
         ii_ = messages_with_special_tokens.find(partial_answer)
         messages_with_special_tokens = messages_with_special_tokens[:ii_] +  partial_answer
 
-        encodeds = tokenizer(messages_with_special_tokens, return_tensors="pt", add_special_tokens=False)
-        model_inputs = encodeds.to(device)
+        try:
 
-        # generation
-        # generated_ids = model.generate(**model_inputs, max_new_tokens=1000, do_sample=True)
-        # decoded = tokenizer.batch_decode(generated_ids)
+            encodeds = tokenizer(messages_with_special_tokens, return_tensors="pt", add_special_tokens=False)
+            model_inputs = encodeds.to(device)
 
-        # simple forward pass
-        last_logits = model(**model_inputs)['logits'][0, -1] # [batch_size, num_tokens, vocab_size]
-        logit_A = last_logits[abc_mapping['A']].tolist()
-        logit_B = last_logits[abc_mapping['B']].tolist()
-        logit_C = last_logits[abc_mapping['C']].tolist()
+            # generation
+            # generated_ids = model.generate(**model_inputs, max_new_tokens=1000, do_sample=True)
+            # decoded = tokenizer.batch_decode(generated_ids)
+
+            # simple forward pass
+            last_logits = model(**model_inputs)['logits'][0, -1] # [batch_size, num_tokens, vocab_size]
+            logit_A = last_logits[abc_mapping['A']].tolist()
+            logit_B = last_logits[abc_mapping['B']].tolist()
+            logit_C = last_logits[abc_mapping['C']].tolist()
+        except:
+            logit_A, logit_B, logit_C = 5, 5, 5
 
         if logit_A > logit_B and logit_A > logit_C:
             winner_pred = "A"
