@@ -22,6 +22,7 @@ import argparse
 import re
 import numpy as np
 import pandas as pd
+import shutil
 from tqdm import tqdm
 
 import torch
@@ -57,8 +58,15 @@ def main():
     # Load model directly
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     tokenizer = AutoTokenizer.from_pretrained(judge_name)
-    model = AutoModelForCausalLM.from_pretrained(judge_name, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2")
-    model.to(device)
+    # model = AutoModelForCausalLM.from_pretrained(judge_name, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2")
+    # model.to(device)
+
+    model = AutoModelForCausalLM.from_pretrained(
+        judge_name, 
+        torch_dtype=torch.bfloat16, 
+        attn_implementation="flash_attention_2",
+        device_map="auto",
+    )
 
     abc_mapping = {}
     for x in ["A", "B", "C"]:
@@ -106,22 +114,22 @@ def main():
         ii_ = messages_with_special_tokens.find(partial_answer)
         messages_with_special_tokens = messages_with_special_tokens[:ii_] +  partial_answer
 
-        try:
+        # try:
 
-            encodeds = tokenizer(messages_with_special_tokens, return_tensors="pt", add_special_tokens=False)
-            model_inputs = encodeds.to(device)
+        encodeds = tokenizer(messages_with_special_tokens, return_tensors="pt", add_special_tokens=False)
+        model_inputs = encodeds.to(device)
 
-            # generation
-            # generated_ids = model.generate(**model_inputs, max_new_tokens=1000, do_sample=True)
-            # decoded = tokenizer.batch_decode(generated_ids)
+        # generation
+        # generated_ids = model.generate(**model_inputs, max_new_tokens=1000, do_sample=True)
+        # decoded = tokenizer.batch_decode(generated_ids)
 
-            # simple forward pass
-            last_logits = model(**model_inputs)['logits'][0, -1] # [batch_size, num_tokens, vocab_size]
-            logit_A = last_logits[abc_mapping['A']].tolist()
-            logit_B = last_logits[abc_mapping['B']].tolist()
-            logit_C = last_logits[abc_mapping['C']].tolist()
-        except:
-            logit_A, logit_B, logit_C = 5, 5, 5
+        # simple forward pass
+        last_logits = model(**model_inputs)['logits'][0, -1] # [batch_size, num_tokens, vocab_size]
+        logit_A = last_logits[abc_mapping['A']].tolist()
+        logit_B = last_logits[abc_mapping['B']].tolist()
+        logit_C = last_logits[abc_mapping['C']].tolist()
+        # except:
+        #     logit_A, logit_B, logit_C = 5, 5, 5
 
         if logit_A > logit_B and logit_A > logit_C:
             winner_pred = "A"
@@ -153,6 +161,12 @@ def main():
             f.write(json.dumps(item) + '\n')
 
     print("finish llm judge run")
+    print("deleting cached model...")
+    model_org, model_name = judge_name.split("/")
+    cache_path = f"/cache/.cache/huggingface/hub/models--{model_org}--{model_name}"
+    shutil.rmtree(cache_path)
+    print("deleted cached model:", cache_path)
+
 
 if __name__ == "__main__":
     with torch.no_grad():
