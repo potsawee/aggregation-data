@@ -5,6 +5,7 @@ import argparse
 import re
 import numpy as np
 import pandas as pd
+import shutil
 from tqdm import tqdm
 
 import torch
@@ -40,8 +41,14 @@ def main():
     # Load model directly
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     tokenizer = AutoTokenizer.from_pretrained(judge_name)
-    model = AutoModelForCausalLM.from_pretrained(judge_name, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2")
-    model.to(device)
+    # model = AutoModelForCausalLM.from_pretrained(judge_name, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2")
+    # model.to(device)
+    model = AutoModelForCausalLM.from_pretrained(
+        judge_name, 
+        torch_dtype=torch.bfloat16, 
+        attn_implementation="flash_attention_2",
+        device_map="auto",
+    )
 
     abc_mapping = {}
     for x in ["Yes", "No"]:
@@ -115,7 +122,12 @@ def main():
             f.write(json.dumps(item) + '\n')
 
     print("finish llm judge run")
-
+    # print("deleting cached model...")
+    # model_org, model_name = judge_name.split("/")
+    # cache_path = f"/cache/.cache/huggingface/hub/models--{model_org}--{model_name}"
+    # shutil.rmtree(cache_path)
+    # print("deleted cached model:", cache_path)
+    
 if __name__ == "__main__":
     with torch.no_grad():
         main()

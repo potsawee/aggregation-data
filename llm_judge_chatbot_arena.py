@@ -129,7 +129,8 @@ def main():
         logit_B = last_logits[abc_mapping['B']].tolist()
         logit_C = last_logits[abc_mapping['C']].tolist()
         # except:
-        #     logit_A, logit_B, logit_C = 5, 5, 5
+            # import ipdb; ipdb.set_trace()
+            # logit_A, logit_B, logit_C = 5, 5, 5
 
         if logit_A > logit_B and logit_A > logit_C:
             winner_pred = "A"
