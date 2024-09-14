@@ -40,6 +40,7 @@ You are trying to determine if the true entity in the response is replaced with 
 You should try your best to determine if the response contains non-factual or hallucinated information according to the above hallucination types. The answer you give MUST be [[Yes]] or [[No]]."""
 
 prompt_template = """#Dialogue History#: {dislogue_history}\n#Response#: {response}\n#Your Judgement#: [["""
+partial_answer = """#Your Judgement#: [["""
 
 def add_arguments(parser):
     '''Build Argument Parser'''
@@ -118,7 +119,7 @@ def main():
                 {"role": "user", "content": prompt},
             ]
             messages_with_special_tokens = tokenizer.apply_chat_template(messages, tokenize=False)
-            ii_ = messages_with_special_tokens.find(partial_answer)
+            ii_ = messages_with_special_tokens.rfind(partial_answer) # rfind --> last index
             messages_with_special_tokens = messages_with_special_tokens[:ii_] +  partial_answer
 
             encodeds = tokenizer(messages_with_special_tokens, return_tensors="pt", add_special_tokens=False)
@@ -163,11 +164,11 @@ def main():
             f.write(json.dumps(item) + '\n')
 
     print("finish llm judge run")
-    # print("deleting cached model...")
-    # model_org, model_name = judge_name.split("/")
-    # cache_path = f"/cache/.cache/huggingface/hub/models--{model_org}--{model_name}"
-    # shutil.rmtree(cache_path)
-    # print("deleted cached model:", cache_path)
+    print("deleting cached model...")
+    model_org, model_name = judge_name.split("/")
+    cache_path = f"/cache/.cache/huggingface/hub/models--{model_org}--{model_name}"
+    shutil.rmtree(cache_path)
+    print("deleted cached model:", cache_path)
     
 if __name__ == "__main__":
     with torch.no_grad():
