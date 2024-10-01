@@ -7,15 +7,22 @@ import numpy as np
 import pandas as pd
 import shutil
 from tqdm import tqdm
+from datasets import load_dataset
 
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
-system_prompt = """You are a helpful assistant. Given the question and options below, your task is to determine whether the selected answer is correct or not. Your response (your verdict) must follow this format, [[Yes]] if the answer is correct or [[No]] if the answer is incorrect."""
+system_prompt = """You are a helpful assistant and your task is to answer the following multiple choice question by giving the most appropriate response. Answer should be one among [A, B, C, D]. The response must stricly follow this format: Answer: [[x]] where x is the letter answer such as A, B, C, D."""
 
-prompt_template = """[Question]\n{question}\n\n[Options]\n(A) {a}\n(B) {b}\n(C) {c}\n(D) {d}\n\n[Answer]\n{answer}"""
+prompt_template = """Question: {question}\n
+A) {a}\n
+B) {b}\n
+C) {c}\n
+D) {d}\n
 
-partial_answer = """Is the answer correct to the question? Verdict: [["""
+Answer: [["""
+
+partial_answer = """Answer: [["""
 
 def add_arguments(parser):
     '''Build Argument Parser'''
@@ -34,10 +41,8 @@ def main():
         print(k, v)
 
     # data_path 
-    data_path = "/workspace/aggregation-data/mmlu/mmlu-unrolled.json"
-    with open(data_path) as f:
-        data = json.load(f)
-    assert len(data) == 14042*2
+    data = load_dataset("cais/mmlu", "all", split='test')
+    assert len(data) == 14042
 
     # Load model directly
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -50,7 +55,7 @@ def main():
     )
 
     abc_mapping = {}
-    for x in ["Yes", "No"]:
+    for x in ["A", "B", "C", "D"]:
         mystr = f"[[{x}"
         tokens = tokenizer(mystr, add_special_tokens=False)['input_ids']
         assert len(tokens) == 2 # [[ and x
@@ -69,26 +74,22 @@ def main():
     print("start from IDX = {}".format(num_done))
 
     correct, total = 0, 0
-    num2letter = {0: "A", 1: "B", 2: "C", 3: "D"}
+
     for i in tqdm(range(num_done, len(data))):
-        x = data[i]
-        label = x['label']
-        answer_string = f"({num2letter[x['selected_choice']]}) {x['answer']}"
+        x = data[i] # ['question', 'subject', 'choices', 'answer']
         prompt = prompt_template.format(
-            question=x['question'], 
-            a=x['choices'][0], 
-            b=x['choices'][1], 
-            c=x['choices'][2], 
-            d=x['choices'][3], 
-            answer=answer_string
+            question=x['question'],
+            a=x['choices'][0],
+            b=x['choices'][1],
+            c=x['choices'][2],
+            d=x['choices'][3]
         )
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt},
-            {"role": "assistant", "content": partial_answer}
         ]
         messages_with_special_tokens = tokenizer.apply_chat_template(messages, tokenize=False)
-        ii_ = messages_with_special_tokens.find(partial_answer)
+        ii_ = messages_with_special_tokens.rfind(partial_answer) # rfind --> last index
         messages_with_special_tokens = messages_with_special_tokens[:ii_] +  partial_answer
 
         encodeds = tokenizer(messages_with_special_tokens, return_tensors="pt", add_special_tokens=False)
@@ -100,27 +101,28 @@ def main():
 
         # simple forward pass
         last_logits = model(**model_inputs)['logits'][0, -1] # [batch_size, num_tokens, vocab_size]
-        logit_Yes = last_logits[abc_mapping['Yes']].tolist()
-        logit_No  = last_logits[abc_mapping['No']].tolist()
+        logit_a = last_logits[abc_mapping['A']].tolist()
+        logit_b = last_logits[abc_mapping['B']].tolist()
+        logit_c = last_logits[abc_mapping['C']].tolist()
+        logit_d = last_logits[abc_mapping['D']].tolist()
 
-        if logit_Yes > logit_No:
-            pred = "correct"
-        else:
-            pred = "incorrect"
+        logits_arr = [logit_a, logit_b, logit_c, logit_d]
+        pred = int(np.argmax(logits_arr))
+        label = x['answer']
 
-        if pred ==  label:
+        if pred == label:
             correct += 1
         total += 1
+        
         if i % 100 == 0:
             print("===> [{}] Accuracy: {:.2f}".format(judge_name, correct/total*100))
 
         item = {
             'i': i,
             'llm_judge': judge_name,
+            'logits': logits_arr,
             'pred': pred,
-            'label': label,
-            'logit_yes': logit_Yes,
-            'logit_no': logit_No
+            'label': label
         }
         with open(output_path, 'a') as f:
             f.write(json.dumps(item) + '\n')
